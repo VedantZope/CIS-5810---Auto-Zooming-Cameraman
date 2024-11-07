@@ -1,3 +1,6 @@
-
 /input_video_frames
+/input_video_frames2
 /SAM_masks
+/SAM_masks_video2
+*.jpg
+*.mp4
