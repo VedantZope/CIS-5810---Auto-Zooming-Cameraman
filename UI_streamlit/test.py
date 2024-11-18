@@ -17,12 +17,7 @@ sys.path.append(str(current_dir))
 
 from filters.kuwahara import kuwahara_process_video
 import helper
-from converter import Converter
-
-
-
-
-
+import shutil
 
 def init_session_state():
     """Initialize session state variables"""
@@ -77,6 +72,15 @@ def run_segmentation():
     st.session_state.segmentation_done = True
 
 
+
+    #Extract INPUT Frames
+    path = "./UI_videos/input_frames/"
+    helper.make_path(path=path)
+    helper.extract_frames(video_path=st.session_state.input_video_file,output_dir=path)
+
+    #TODO Extract SEGMENTATION frames if needed
+
+
 def generate_heatmap():
     """Generate and display heatmap"""
     with st.spinner("Generating heatmap..."):
@@ -107,14 +111,24 @@ def apply_filter(filter_type, video_file):
         # Process the video
         if filter_type=="Kuwahara":
             kuwahara_process_video(input_path=st.session_state.input_video_file,
-                                                output_path = outputfile)
+                                                output_path = outputfile, kuwahara_param = st.session_state.kuwahara_param)
+        else:
+            st.text("No filter selected.")
 
         st.success(f"{filter_type} filter applied! - Converting to Appropriate Codec.")
         st.session_state.filter_done = True
+ 
 
     
     convertedVideo = "./UI_videos/filter_output_h264.mp4"
     helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo)
+
+    # Extract frames for analysis later
+
+    path = "./UI_videos/filter_frames/"
+    helper.make_path(path=path)
+    helper.extract_frames(video_path=convertedVideo,output_dir=path)
+
 
     if st.session_state.debug:
         st.video(convertedVideo)
@@ -138,49 +152,7 @@ def show_video_details(video_file):
         st.video(video_file)
 
 
-def main():
-    st.title("Computer Vision Final Project Group 30 Dashboard")
-    init_session_state()
-
-    # Left sidebar for step selection
-    with st.sidebar:
-        st.header("Processing Steps")
-
-        # Step 1: Video Upload
-        st.subheader("1. Upload Video")
-        if upload_video():
-            st.success("Video uploaded!")
-
-        # Debug 
-        debug = st.checkbox(label="Debug")
-        st.session_state.debug = debug
-
-        # Step 2: Segmentation Settings
-        st.subheader("2. Segmentation Settings")
-        segmentation_model = st.selectbox(
-            "Select Segmentation Model",
-            ["Model A", "Model B", "Model C"]
-        )
-
-        # Step 3: Heatmap Settings
-        st.subheader("3. Heatmap Settings")
-        heatmap_type = st.selectbox(
-            "Select Heatmap Type",
-            ["Type 1", "Type 2", "Type 3"]
-        )
-
-        # Step 4: Filter Settings
-        st.subheader("4. Filter Settings (Optional)")
-        filter_type = st.selectbox(
-            "Select Filter",
-            ["None", "Blur", "Sharpen", "Grayscale", "Kuwahara"]
-        )
-
-        # Start Processing Button
-        if st.button("Start Processing") and st.session_state.video_file is not None:
-            st.session_state.processing_started = True
-
-    # Main panel for processing and results
+def hometab():
     if st.session_state.video_file is not None:
         st.header("Processing Pipeline")
 
@@ -200,10 +172,10 @@ def main():
                     generate_heatmap()
 
             # Apply filter if selected
-            if st.session_state.heatmap_done and filter_type != "None":
+            if st.session_state.heatmap_done and st.session_state.filter_type != "None":
                 st.subheader("Step 3: Applying Filter")
                 if not st.session_state.filter_done:
-                    apply_filter(filter_type, st.session_state.video_file)
+                    apply_filter(st.session_state.filter_type, st.session_state.video_file)
                     # st.session_state.filtered_video = output_video
 
             # Final output
@@ -217,6 +189,76 @@ def main():
                 # )
     else:
         st.info("Please upload a video file to begin processing")
+
+def frameAnalysisTab():
+    #TODO - Add plotly plot here to compare frame by frame  
+    st.header("Content in Second Tab") 
+    st.write("This is the content of the second tab")
+    # Add different components
+    st.slider("Select a value", 0, 50)
+
+
+def sidebar():
+    st.header("Processing Steps")
+
+    # Step 1: Video Upload
+    st.subheader("1. Upload Video")
+    if upload_video():
+        st.success("Video uploaded!")
+
+    # Debug 
+    debug = st.checkbox(label="Debug")
+    st.session_state.debug = debug
+
+    # Step 2: Segmentation Settings
+    st.subheader("2. Segmentation Settings")
+    segmentation_model = st.selectbox(
+        "Select Segmentation Model",
+        ["Model A", "Model B", "Model C"]
+    )
+    st.session_state.segmentation_model = segmentation_model
+
+    # Step 3: Heatmap Settings
+    st.subheader("3. Heatmap Settings")
+    heatmap_type = st.selectbox(
+        "Select Heatmap Type",
+        ["Type 1", "Type 2", "Type 3"]
+    )
+    st.session_state.heatmap_type = heatmap_type
+
+    # Step 4: Filter Settings
+    st.subheader("4. Filter Settings (Optional)")
+    filter_type = st.selectbox(
+        "Select Filter",
+        ["None", "Blur", "Sharpen", "Grayscale", "Kuwahara"]
+    )
+    st.session_state.filter_type = filter_type
+    if filter_type=="Kuwahara":
+        kuwahara_param = st.number_input(label="Kuwahara radius", min_value=1, max_value=10, step=1, format="%i")
+        st.session_state.kuwahara_param = kuwahara_param
+
+    # Start Processing Button
+    if st.button("Start Processing") and st.session_state.video_file is not None:
+        st.session_state.processing_started = True
+
+def main():
+    st.title("Computer Vision Final Project Group 30 Dashboard")
+    init_session_state()
+
+    # Tabs
+    home_tab, frame_analysis_tab = st.tabs(["Home", "Analyze Frames"])
+
+    # Add content to first tab
+    with home_tab:
+        hometab()
+
+    # Add content to second tab
+    with frame_analysis_tab:
+        frameAnalysisTab()
+
+    # Left sidebar for step selection
+    with st.sidebar:
+        sidebar()
 
 
 if __name__ == "__main__":

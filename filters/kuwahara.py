@@ -4,10 +4,10 @@ import numpy as np
 import tempfile 
 from stqdm import stqdm
 
-def kuwahara_frame(frame):
-    return kuwahara(frame, method='mean', radius=2)
+def kuwahara_frame(frame, radius):
+    return kuwahara(frame, method='mean', radius=radius)
 
-def kuwahara_process_video(input_path, output_path):
+def kuwahara_process_video(input_path, output_path, kuwahara_param):
 
     # Create temporary file for output video
     temp_output = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
@@ -37,7 +37,7 @@ def kuwahara_process_video(input_path, output_path):
         # Add your video processing here
         # For example, convert to grayscale and back to BGR
         # processed_frame = cv2.cvtColor(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
-        processed_frame = kuwahara_frame(frame=frame)
+        processed_frame = kuwahara_frame(frame=frame, radius=kuwahara_param)
         
         # Write processed frame
         out.write(processed_frame)
