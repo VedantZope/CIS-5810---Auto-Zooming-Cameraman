@@ -2,5 +2,6 @@
 /input_video_frames2
 /SAM_masks
 /SAM_masks_video2
+Object_Detection/Models/*pt
 *.jpg
 *.mp4
