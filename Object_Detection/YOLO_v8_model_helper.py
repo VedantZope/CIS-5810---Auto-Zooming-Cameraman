@@ -5,7 +5,7 @@ import sys
 from ultralytics import YOLO
 from Object_Detection.detect import *
 from Object_Detection.utils import *
-
+from stqdm import stqdm
 
 # Paths to your custom YOLOv8 models
 MODEL_PATH = 'Object_Detection/Models/bb_ball.pt'
@@ -139,7 +139,7 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
         out.write(overlay)
         
         # Display the frame with heatmap (optional)
-        cv2.imshow('Heatmap Video', overlay)
+        # cv2.imshow('Heatmap Video', overlay)
         
         # Press 'q' to exit early
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -198,6 +198,7 @@ def YOLO(INPUT_VIDEO, OUTPUT_VIDEO, MODEL_PATH = MODEL_PATH, PERSON_MODEL_PATH =
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 'mp4v' codec for MP4 format
@@ -219,7 +220,8 @@ def YOLO(INPUT_VIDEO, OUTPUT_VIDEO, MODEL_PATH = MODEL_PATH, PERSON_MODEL_PATH =
     # Initialize variable to collect labels and bounding boxes for every frame
     frame_detections = []
 
-    while True:
+    # while True:
+    for _ in stqdm(range(total_frames), desc="Detecting Objects video"):
         ret, frame = cap.read()
         if not ret:
             break
@@ -236,7 +238,7 @@ def YOLO(INPUT_VIDEO, OUTPUT_VIDEO, MODEL_PATH = MODEL_PATH, PERSON_MODEL_PATH =
         })
 
         # Display the resulting frame (optional)
-        cv2.imshow('Basketball Detection and Tracking', frame)
+        # cv2.imshow('Basketball Detection and Tracking', frame)
 
         # Write the frame to the output video
         out.write(frame)
