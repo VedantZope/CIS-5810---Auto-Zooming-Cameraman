@@ -11,6 +11,7 @@ import streamlit as st
 import os 
 import subprocess
 
+
 # Get the parent directory of 'main'
 current_dir = Path(__file__).parent.parent
 sys.path.append(str(current_dir))
@@ -18,6 +19,9 @@ sys.path.append(str(current_dir))
 from filters.kuwahara import kuwahara_process_video
 import helper
 import shutil
+
+# Import object detection model - YOLOv8 
+from Object_Detection.YOLO_v8_model_helper import *
 
 def init_session_state():
     """Initialize session state variables"""
@@ -53,13 +57,25 @@ def upload_video():
     return False
 
 
-def run_segmentation():
+def run_segmentation(model_type, video_file):
     """Simulate segmentation processing"""
+
+    tfile_model = tempfile.NamedTemporaryFile(delete=False)
+    tfile_model.write(video_file.read())
+
+    outputfile = f"./UI_videos/model_{model_type}_output.mp4"
+
     with st.spinner("Running segmentation..."):
-        progress_bar = st.progress(0)
-        for i in range(100):
-            time.sleep(0.02)
-            progress_bar.progress(i + 1)
+
+        if model_type =="YOLOv8":
+            print("YOLO")
+
+            _ = YOLO(INPUT_VIDEO=st.session_state.input_video_file, OUTPUT_VIDEO=outputfile)
+
+        # progress_bar = st.progress(0)
+        # for i in range(100):
+        #     time.sleep(0.02)
+        #     progress_bar.progress(i + 1)
         st.success("Segmentation completed!")
 
         # Display dummy segmentation result
@@ -163,7 +179,7 @@ def hometab():
             # Run segmentation
             st.subheader("Step 1: Segmentation")
             if not st.session_state.segmentation_done:
-                run_segmentation()
+                run_segmentation(st.session_state.segmentation_model, st.session_state.video_file)
 
             # Generate heatmap
             if st.session_state.segmentation_done:
@@ -214,7 +230,7 @@ def sidebar():
     st.subheader("2. Segmentation Settings")
     segmentation_model = st.selectbox(
         "Select Segmentation Model",
-        ["Model A", "Model B", "Model C"]
+        ["YOLOv8", "Model B", "Model C"]
     )
     st.session_state.segmentation_model = segmentation_model
 
