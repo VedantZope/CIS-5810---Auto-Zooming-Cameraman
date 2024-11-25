@@ -60,5 +60,4 @@ def extract_frames(video_path, output_dir):
     # Release the video capture object
     video.release()
     print(f"Extracted {frame_count} frames and saved in {output_dir}")
-
- 
+    

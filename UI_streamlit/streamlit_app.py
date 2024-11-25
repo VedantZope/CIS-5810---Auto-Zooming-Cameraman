@@ -11,6 +11,7 @@ import streamlit as st
 import os 
 import subprocess
 
+
 # Get the parent directory of 'main'
 current_dir = Path(__file__).parent.parent
 sys.path.append(str(current_dir))
@@ -18,6 +19,9 @@ sys.path.append(str(current_dir))
 from filters.kuwahara import kuwahara_process_video
 import helper
 import shutil
+
+# Import object detection model - YOLOv8 
+from Object_Detection.YOLO_v8_model_helper import *
 
 def init_session_state():
     """Initialize session state variables"""
@@ -53,33 +57,46 @@ def upload_video():
     return False
 
 
-def run_segmentation():
+def run_segmentation(model_type, video_file):
     """Simulate segmentation processing"""
+
+    tfile_model = tempfile.NamedTemporaryFile(delete=False)
+    tfile_model.write(video_file.read())
+
+    outputfile = f"./UI_videos/model_{model_type}_output.mp4"
+
     with st.spinner("Running segmentation..."):
-        progress_bar = st.progress(0)
-        for i in range(100):
-            time.sleep(0.02)
-            progress_bar.progress(i + 1)
+
+        if model_type =="YOLOv8":
+            print("YOLO")
+
+            _ = YOLO(INPUT_VIDEO=st.session_state.input_video_file, OUTPUT_VIDEO=outputfile)
+
+        # progress_bar = st.progress(0)
+        # for i in range(100):
+        #     time.sleep(0.02)
+        #     progress_bar.progress(i + 1)
         st.success("Segmentation completed!")
-
-        # Display dummy segmentation result
-        fig, ax = plt.subplots()
-        dummy_seg = np.random.rand(100, 100)
-        sns.heatmap(dummy_seg, ax=ax)
     
-    if st.session_state.debug:
-        st.pyplot(fig)
     st.session_state.segmentation_done = True
-
-
 
     #Extract INPUT Frames
     path = "./UI_videos/input_frames/"
     helper.make_path(path=path)
     helper.extract_frames(video_path=st.session_state.input_video_file,output_dir=path)
 
-    #TODO Extract SEGMENTATION frames if needed
+    # Extract SEGMENTATION frames if needed
+    path = "./UI_videos/model_frames/"
+    helper.make_path(path=path)
+    helper.extract_frames(video_path=st.session_state.input_video_file,output_dir=path)
 
+    convertedVideo_model = f"./UI_videos/model_{model_type}_output_h264.mp4"
+    helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo_model)
+
+    st.session_state.modelh264_video_file = convertedVideo_model
+
+    if st.session_state.debug:
+        st.video(convertedVideo_model)
 
 def generate_heatmap():
     """Generate and display heatmap"""
@@ -88,7 +105,6 @@ def generate_heatmap():
         for i in range(100):
             time.sleep(0.01)
             progress_bar.progress(i + 1)
-
         fig, ax = plt.subplots(figsize=(10, 6))
         data = np.random.rand(20, 20)
         sns.heatmap(data, cmap='viridis', ax=ax)
@@ -110,15 +126,13 @@ def apply_filter(filter_type, video_file):
     with st.spinner(f"Applying {filter_type} filter..."):
         # Process the video
         if filter_type=="Kuwahara":
-            kuwahara_process_video(input_path=st.session_state.input_video_file,
+            kuwahara_process_video(input_path=st.session_state.modelh264_video_file,
                                                 output_path = outputfile, kuwahara_param = st.session_state.kuwahara_param)
         else:
             st.text("No filter selected.")
 
         st.success(f"{filter_type} filter applied! - Converting to Appropriate Codec.")
         st.session_state.filter_done = True
- 
-
     
     convertedVideo = "./UI_videos/filter_output_h264.mp4"
     helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo)
@@ -128,7 +142,6 @@ def apply_filter(filter_type, video_file):
     path = "./UI_videos/filter_frames/"
     helper.make_path(path=path)
     helper.extract_frames(video_path=convertedVideo,output_dir=path)
-
 
     if st.session_state.debug:
         st.video(convertedVideo)
@@ -163,7 +176,7 @@ def hometab():
             # Run segmentation
             st.subheader("Step 1: Segmentation")
             if not st.session_state.segmentation_done:
-                run_segmentation()
+                run_segmentation(st.session_state.segmentation_model, st.session_state.video_file)
 
             # Generate heatmap
             if st.session_state.segmentation_done:
@@ -214,7 +227,7 @@ def sidebar():
     st.subheader("2. Segmentation Settings")
     segmentation_model = st.selectbox(
         "Select Segmentation Model",
-        ["Model A", "Model B", "Model C"]
+        ["YOLOv8", "Model B", "Model C"]
     )
     st.session_state.segmentation_model = segmentation_model
 
