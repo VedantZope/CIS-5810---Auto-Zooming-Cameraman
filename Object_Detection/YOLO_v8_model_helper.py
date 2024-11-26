@@ -36,7 +36,7 @@ import cv2
 import numpy as np
 import os
 
-def generate_heatmap_video(frame_detections, video_path, output_path, weight_mapping, return_heatmaps=False, iters = 5, blur_kernel_size = (17,17), blur_sigma = 15,get_contours=False):
+def generate_heatmap_video(frame_detections, video_path, output_path, weight_mapping, return_heatmaps=False, iters = 5, blur_kernel_size = (17,17), blur_sigma = 15,get_contours=True):
     """
     Generates a heatmap video based on frame detections with specified weights for each class.
     
@@ -86,7 +86,8 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
     detections_index = 0
     num_detections = len(frame_detections_sorted)
     
-    for frame_number in range(1, total_frames + 1):
+    contour_dict = {}
+    for frame_number in range(0, total_frames):
         ret, frame = cap.read()
         if not ret:
             print(f"End of video reached at frame {frame_number}.")
@@ -96,7 +97,7 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
         if detections_index < num_detections and frame_detections_sorted[detections_index]['frame_number'] == frame_number:
             detections = frame_detections_sorted[detections_index]['detections']
             detections_index += 1
-            print(f"Frame {frame_number}: Processing {len(detections)} detections.")
+            # print(f"Frame {frame_number}: Processing {len(detections)} detections.")
         else:
             detections = []
             print(f"Frame {frame_number}: No detections.")
@@ -155,8 +156,8 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
             x, y, w_roi, h_roi = cv2.boundingRect(largest_contour)
-            # if get_contours:
-            #     contour_dict[frame_index] = largest_contour
+            if get_contours:
+                contour_dict[frame_number] = largest_contour
             # Draw the rectangle on the heatmap
             cv2.rectangle(heatmap_color, (x, y), (x + w_roi, y + h_roi), (0,0,0), 2)
 
@@ -181,8 +182,8 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
             break
         
         # Print progress every 30 frames
-        if frame_number % 30 == 0:
-            print(f"Processed {frame_number}/{total_frames} frames.")
+        # if frame_number % 30 == 0:
+            # print(f"Processed {frame_number}/{total_frames} frames.")
     
     # Release resources
     cap.release()
@@ -191,28 +192,11 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
     print("Heatmap video creation complete.")
     print(f"Output saved to: {output_path}")
     
+    #Store the contours for zooming later
+
     # Return heatmaps if requested
-    if return_heatmaps:
-        return per_frame_heatmaps
-
-def blur_maps_YOLO(frames,input_video_dir="",object_masks={}, iters=1, blur_kernel_size = (11,11), blur_sigma = 15, save_frames=False, output_dir = "", get_contours=False):
-    # Add masks together to create their weighted distribution
-    blur_kernel_size = blur_kernel_size  # Adjust for larger or smaller influence areas
-    blur_sigma = blur_sigma  # Sigma controls the spread of the influence
-    iters = iters
-
-    heatmap_frames = []
-
-    if get_contours:
-        contour_dict = {}
-
-    for frame_index,frame in stqdm(enumerate(frames), total=len(frames)):
-        video_frame = cv2.imread(os.path.join(input_video_dir, frame))
-        h, w = video_frame.shape[:2]    
-    
-        # Create an empty image with the same size and type as the masks (transparent or black)
-        masks_added_total = np.zeros((h, w), dtype=np.float64)
-
+    if return_heatmaps and get_contours:
+        return per_frame_heatmaps, contour_dict
 
 
 def YOLO(INPUT_VIDEO, OUTPUT_VIDEO, MODEL_PATH = MODEL_PATH, PERSON_MODEL_PATH = PERSON_MODEL_PATH,
@@ -252,6 +236,8 @@ def YOLO(INPUT_VIDEO, OUTPUT_VIDEO, MODEL_PATH = MODEL_PATH, PERSON_MODEL_PATH =
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    print("DEBUG - ",frame_width, frame_height)
 
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 'mp4v' codec for MP4 format
@@ -312,9 +298,4 @@ def YOLO(INPUT_VIDEO, OUTPUT_VIDEO, MODEL_PATH = MODEL_PATH, PERSON_MODEL_PATH =
     # Return or save the frame_detections variable as needed
     return frame_detections
 
-# if __name__ == "__main__":
-#     frame_detections = np.load('frame_detections.npy', allow_pickle=True)
-#     # Optional: Print the detections per frame
-#     print(frame_detections)
-#     generate_heatmap_video(frame_detections, INPUT_VIDEO, 'output_heatmap_obj.mp4', WEIGHTS, return_heatmaps=False)
 

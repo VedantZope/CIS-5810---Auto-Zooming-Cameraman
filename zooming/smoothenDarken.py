@@ -114,10 +114,12 @@ class EnhancedVideoStabilizer:
 
         # Convert to PIL and apply border darkening
         pil_cropped = Image.fromarray(cropped)
-        darkened = self.darken_borders(pil_cropped)
+
+        # darkened = self.darken_borders(pil_cropped)
 
         # Return back to RGB
-        final = darkened.convert('RGB')
+        # final = darkened.convert('RGB')
+        final = pil_cropped.convert('RGB')
 
         return final
 

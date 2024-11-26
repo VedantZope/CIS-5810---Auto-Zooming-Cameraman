@@ -11,6 +11,8 @@ import streamlit as st
 import os 
 import subprocess
 import json
+from PIL import Image
+from PIL import Image, ImageDraw
 
 # Get the parent directory of 'main'
 current_dir = Path(__file__).parent.parent
@@ -22,6 +24,10 @@ import shutil
 
 # Import object detection model - YOLOv8 
 from Object_Detection.YOLO_v8_model_helper import *
+
+# Import SmoothenZoom 
+from zooming.smoothen import SmoothVideoStabilizer
+from zooming.smoothenDarken import EnhancedVideoStabilizer
 
 def init_session_state():
     """Initialize session state variables"""
@@ -50,7 +56,9 @@ def upload_video():
             os.mkdir("./UI_videos")
 
         temp_file_to_save = './UI_videos/input.mp4'
+        output_path = './UI_videos/input480p.mp4'
         helper.write_bytesio_to_file(temp_file_to_save, uploaded_file)
+        # helper.make_video_480(temp_file_to_save, output_path)
         st.session_state.input_video_file = temp_file_to_save
         return True
     return False
@@ -102,13 +110,16 @@ def generate_heatmap(model_type):
     with st.spinner("Generating heatmap..."):
         if model_type=='YOLOv8':
             WEIGHTS = {'person': 10, 'Basketball': 50}
-            blurred_heatmaps = generate_heatmap_video(frame_detections= st.session_state.yolo_frame_detections,video_path= st.session_state.modelh264_video_file,
+            blurred_heatmaps, contours = generate_heatmap_video(frame_detections= st.session_state.yolo_frame_detections,video_path= st.session_state.modelh264_video_file,
                                     output_path=outputfile, return_heatmaps = True, weight_mapping=WEIGHTS)
             
             # with open('merged_frames_heatmap_yolov8.txt', 'w') as convert_file: 
             #     convert_file.write(json.dumps(heatmaps))
 
             # np.save('merged_frames_heatmap_yolov8.npy', blurred_heatmaps)
+
+            # Store the Contours for use later 
+            st.session_state.contours = contours
             
             # Extract MERGED frames if needed
             path = "./UI_videos/model_merged_frames/"
@@ -120,21 +131,6 @@ def generate_heatmap(model_type):
                 p for p in os.listdir(path)
                 if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
             ]
-        
-        # Blur the merged maps now 
-        # blur_path = "./UI_videos/model_blurred_frames/"
-        # helper.make_path(path=blur_path)
-        # helper.blur_maps(frames=frame_names,input_video_dir=path, object_masks=heatmaps,
-        #                  iters = 1,save_frames=True, output_dir= blur_path)
-        
-        # output_blurred_file = f"./UI_videos/model_{model_type}_blurred.mp4"
-        # # Stitch frames to video
-        # helper.stitch_frames_to_video(
-        #     frames = "", 
-        #     frames_dir=blur_path, 
-        #     from_dir=True,
-        #     output_video_path=output_blurred_file
-        # )
 
     convertedVideo_blurred = f"./UI_videos/model_{model_type}_blurred_h264.mp4"
     helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo_blurred)
@@ -145,8 +141,53 @@ def generate_heatmap(model_type):
 
     st.session_state.heatmap_done = True
 
-
 def apply_filter(filter_type, video_file):
+    """ First Zoom""" 
+
+    output_zoomed_file = "./UI_videos/filter_output.mp4"
+
+    with st.spinner(f"Automatically Zooming..."):
+        # Call Zoom 
+        # Initialize the stabilizer
+        stabilizer = EnhancedVideoStabilizer(
+            buffer_size=30,  # Increase for smoother but slower transitions
+            max_threshold=0.25,  # Adjust for maximum allowed sudden changes
+            min_threshold=0.5  # Minimum threshold for changes
+        )
+        stabilizer_frames = []
+        # Get original input frames
+        input_path =  "./UI_videos/input_frames/"
+        frame_names = [
+            p for p in os.listdir(input_path)
+            if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
+        ]
+        frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
+        st.warning("ZOOMING")
+        for index,frame_name in stqdm(enumerate(frame_names), total=len(frame_names)):
+            frame = cv2.imread(f"{input_path}/{frame_name}")
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Cnvrt frame to pillow image 
+            frame_pil = Image.fromarray(frame_rgb)
+            if index not in st.session_state.contours:
+                print("ERROR - FRAME NOT FOUND ", index)
+                continue
+            stabilized_frame = stabilizer.process_frame(frame_pil, st.session_state.contours[index])
+            stabilizer_frames.append(cv2.cvtColor(np.array(stabilized_frame),cv2.COLOR_BGR2RGB))
+
+            if index==0:
+                cv2.imwrite("test.jpeg", cv2.cvtColor(np.array(stabilized_frame),cv2.COLOR_BGR2RGB))
+                
+
+    # Create Zoomed video
+    helper.stitch_frames_to_video(frames=stabilizer_frames,frames_dir="",output_video_path=output_zoomed_file, from_dir=False)
+
+    converted_zoomed_Video = "./UI_videos/filter_zoomed_h264.mp4"
+    helper.convert_video_h264(input_file=output_zoomed_file, output_file=converted_zoomed_Video)
+
+    if st.session_state.debug:
+        st.video(converted_zoomed_Video)
+
+
     """Apply selected filter to video"""
 
     tfile = tempfile.NamedTemporaryFile(delete=False)
@@ -165,17 +206,17 @@ def apply_filter(filter_type, video_file):
         st.success(f"{filter_type} filter applied! - Converting to Appropriate Codec.")
         st.session_state.filter_done = True
     
-    convertedVideo = "./UI_videos/filter_output_h264.mp4"
-    helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo)
+    # convertedVideo = "./UI_videos/filter_output_h264.mp4"
+    # helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo)
 
-    # Extract frames for analysis later
+    # # Extract frames for analysis later
 
-    path = "./UI_videos/filter_frames/"
-    helper.make_path(path=path)
-    helper.extract_frames(video_path=convertedVideo,output_dir=path)
+    # path = "./UI_videos/filter_frames/"
+    # helper.make_path(path=path)
+    # helper.extract_frames(video_path=convertedVideo,output_dir=path)
 
-    if st.session_state.debug:
-        st.video(convertedVideo)
+    # if st.session_state.debug:
+    #     st.video(convertedVideo)
     
 def show_video_details(video_file):
     """Display video metadata"""
@@ -213,9 +254,9 @@ def hometab():
                 if not st.session_state.heatmap_done:
                     generate_heatmap(st.session_state.segmentation_model)
 
-            # Apply filter if selected
-            if st.session_state.heatmap_done and st.session_state.filter_type != "None":
-                st.subheader("Step 3: Applying Filter")
+            # Zoom and Apply filter if selected
+            if st.session_state.heatmap_done:
+                st.subheader("Step 3: Zooming and Applying Filter")
                 if not st.session_state.filter_done:
                     apply_filter(st.session_state.filter_type, st.session_state.video_file)
                     # st.session_state.filtered_video = output_video

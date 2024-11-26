@@ -17,6 +17,35 @@ def write_bytesio_to_file(filename, bytesio):
         # Copy the BytesIO stream to the output file
         outfile.write(bytesio.getbuffer())
 
+def make_video_480(input_path, output_path):
+    cap = cv2.VideoCapture(input_path)
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    
+    # Set new dimensions (keeping aspect ratio)
+    original_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    original_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    aspect_ratio = original_width / original_height
+    new_height = 480
+    new_width = 640
+    
+    # Get original FPS
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    
+    out = cv2.VideoWriter(output_path, fourcc, fps, (new_width, new_height))
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+            
+        resized_frame = cv2.resize(frame, (new_width, new_height), 
+                                 interpolation=cv2.INTER_CUBIC)
+        out.write(resized_frame)
+    
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
+
 def make_path(path):
     if os.path.exists(path):
         shutil.rmtree(path)
@@ -111,7 +140,7 @@ def extract_frames(video_path, output_dir):
             break
 
          # Save the frame as an image file
-        resized_frame = cv2.resize(frame, (640,480))
+        resized_frame = cv2.resize(frame, (1280,790))
         frame_path = os.path.join(output_dir, f"{frame_count:04d}.jpg")
         cv2.imwrite(frame_path, resized_frame)
         frame_count+=1
