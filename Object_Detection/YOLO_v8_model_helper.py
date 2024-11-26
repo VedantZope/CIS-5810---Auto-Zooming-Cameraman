@@ -6,6 +6,7 @@ from ultralytics import YOLO
 from Object_Detection.detect import *
 from Object_Detection.utils import *
 from stqdm import stqdm
+import json
 
 # Paths to your custom YOLOv8 models
 MODEL_PATH = 'Object_Detection/Models/bb_ball.pt'
@@ -35,7 +36,7 @@ import cv2
 import numpy as np
 import os
 
-def generate_heatmap_video(frame_detections, video_path, output_path, weight_mapping, return_heatmaps=False):
+def generate_heatmap_video(frame_detections, video_path, output_path, weight_mapping, return_heatmaps=False, iters = 5, blur_kernel_size = (17,17), blur_sigma = 15,get_contours=False):
     """
     Generates a heatmap video based on frame detections with specified weights for each class.
     
@@ -78,7 +79,7 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
     print("Starting heatmap video creation...")
     
     # Initialize list to store per-frame heatmaps if needed
-    per_frame_heatmaps = [] if return_heatmaps else None
+    per_frame_heatmaps = {} if return_heatmaps else None
     
     # Ensure frame_detections are sorted by frame_number
     frame_detections_sorted = sorted(frame_detections, key=lambda x: x['frame_number'])
@@ -121,25 +122,58 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
             frame_heatmap[y1:y2, x1:x2] += weight
         
         # Normalize heatmap to the range [0, 255]
-        normalized_heatmap = np.clip(frame_heatmap, 0, 255).astype(np.uint8)
+        normalized_heatmap = ((frame_heatmap - frame_heatmap.min()) * 255.0 / 
+                      (frame_heatmap.max() - frame_heatmap.min()))
+        normalized_heatmap = np.clip(normalized_heatmap, 0, 255).astype(np.uint8)
         
+        
+        # TODO - BLUR the map 
+        for _ in range(iters):
+            normalized_heatmap = cv2.GaussianBlur(normalized_heatmap, blur_kernel_size, blur_sigma)
+        norm_map_blurred = normalized_heatmap
+        
+        # Add colour
+        heatmap_color = cv2.applyColorMap(norm_map_blurred, cv2.COLORMAP_JET)
+
+        # TODO - ADD MAX AND BOUNDED BOXING TO CHECK RESULTS.
+        print(heatmap_color.shape)
+        bw_video_frame = cv2.cvtColor(heatmap_color, cv2.COLOR_BGR2GRAY)
+        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(bw_video_frame)
+
+        # TODO - Draw centre
+        cv2.drawMarker(heatmap_color, max_loc, color=(0,0,0), markerType=cv2.MARKER_STAR, markerSize=15, thickness=5)
+
+        mean_val, stddev_val = cv2.meanStdDev(bw_video_frame)
+        threshold = mean_val + 2.5 * stddev_val
+
+        _, threshold_mask = cv2.threshold(bw_video_frame, threshold.astype(np.uint8).flatten()[0], 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+        # Find contours of the thresholded regions to create the bounding box
+        contours, _ = cv2.findContours(threshold_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Draw a bounding rectangle around the largest contour (region of interest)
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            x, y, w_roi, h_roi = cv2.boundingRect(largest_contour)
+            # if get_contours:
+            #     contour_dict[frame_index] = largest_contour
+            # Draw the rectangle on the heatmap
+            cv2.rectangle(heatmap_color, (x, y), (x + w_roi, y + h_roi), (0,0,0), 2)
+
         # Apply color map to the heatmap
-        heatmap_color = cv2.applyColorMap(normalized_heatmap, cv2.COLORMAP_HOT)
-        
+        heatmap_color = cv2.applyColorMap(heatmap_color, cv2.COLORMAP_JET)
+
         # Optional: Store the heatmap for this frame
         if return_heatmaps:
-            per_frame_heatmaps.append(frame_heatmap.copy())
+            per_frame_heatmaps[frame_number] = frame_heatmap.copy()
         
         # Overlay the heatmap onto the original frame
-        alpha = 0.3  # Transparency for the original frame
-        beta = 0.7   # Transparency for the heatmap
+        alpha = 0  # Transparency for the original frame
+        beta = 1   # Transparency for the heatmap
         overlay = cv2.addWeighted(frame, alpha, heatmap_color, beta, 0)
         
         # Write the overlaid frame to the output video
         out.write(overlay)
-        
-        # Display the frame with heatmap (optional)
-        # cv2.imshow('Heatmap Video', overlay)
         
         # Press 'q' to exit early
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -160,6 +194,25 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
     # Return heatmaps if requested
     if return_heatmaps:
         return per_frame_heatmaps
+
+def blur_maps_YOLO(frames,input_video_dir="",object_masks={}, iters=1, blur_kernel_size = (11,11), blur_sigma = 15, save_frames=False, output_dir = "", get_contours=False):
+    # Add masks together to create their weighted distribution
+    blur_kernel_size = blur_kernel_size  # Adjust for larger or smaller influence areas
+    blur_sigma = blur_sigma  # Sigma controls the spread of the influence
+    iters = iters
+
+    heatmap_frames = []
+
+    if get_contours:
+        contour_dict = {}
+
+    for frame_index,frame in stqdm(enumerate(frames), total=len(frames)):
+        video_frame = cv2.imread(os.path.join(input_video_dir, frame))
+        h, w = video_frame.shape[:2]    
+    
+        # Create an empty image with the same size and type as the masks (transparent or black)
+        masks_added_total = np.zeros((h, w), dtype=np.float64)
+
 
 
 def YOLO(INPUT_VIDEO, OUTPUT_VIDEO, MODEL_PATH = MODEL_PATH, PERSON_MODEL_PATH = PERSON_MODEL_PATH,

@@ -10,7 +10,7 @@ import cv2
 import streamlit as st
 import os 
 import subprocess
-
+import json
 
 # Get the parent directory of 'main'
 current_dir = Path(__file__).parent.parent
@@ -36,7 +36,6 @@ def init_session_state():
     if 'processing_started' not in st.session_state:
         st.session_state.processing_started = False
 
-
 def upload_video():
     """Handle video upload"""
     uploaded_file = st.file_uploader(
@@ -56,7 +55,6 @@ def upload_video():
         return True
     return False
 
-
 def run_segmentation(model_type, video_file):
     """Simulate segmentation processing"""
 
@@ -70,12 +68,10 @@ def run_segmentation(model_type, video_file):
         if model_type =="YOLOv8":
             print("YOLO")
 
-            _ = YOLO(INPUT_VIDEO=st.session_state.input_video_file, OUTPUT_VIDEO=outputfile)
+            frame_detections = YOLO(INPUT_VIDEO=st.session_state.input_video_file, OUTPUT_VIDEO=outputfile)
 
-        # progress_bar = st.progress(0)
-        # for i in range(100):
-        #     time.sleep(0.02)
-        #     progress_bar.progress(i + 1)
+            st.session_state.yolo_frame_detections = frame_detections
+
         st.success("Segmentation completed!")
     
     st.session_state.segmentation_done = True
@@ -88,7 +84,7 @@ def run_segmentation(model_type, video_file):
     # Extract SEGMENTATION frames if needed
     path = "./UI_videos/model_frames/"
     helper.make_path(path=path)
-    helper.extract_frames(video_path=st.session_state.input_video_file,output_dir=path)
+    helper.extract_frames(video_path=outputfile,output_dir=path)
 
     convertedVideo_model = f"./UI_videos/model_{model_type}_output_h264.mp4"
     helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo_model)
@@ -98,20 +94,55 @@ def run_segmentation(model_type, video_file):
     if st.session_state.debug:
         st.video(convertedVideo_model)
 
-def generate_heatmap():
+def generate_heatmap(model_type):
     """Generate and display heatmap"""
-    with st.spinner("Generating heatmap..."):
-        progress_bar = st.progress(0)
-        for i in range(100):
-            time.sleep(0.01)
-            progress_bar.progress(i + 1)
-        fig, ax = plt.subplots(figsize=(10, 6))
-        data = np.random.rand(20, 20)
-        sns.heatmap(data, cmap='viridis', ax=ax)
     
+    outputfile = f"./UI_videos/model_{model_type}_merged.mp4"
+
+    with st.spinner("Generating heatmap..."):
+        if model_type=='YOLOv8':
+            WEIGHTS = {'person': 10, 'Basketball': 50}
+            blurred_heatmaps = generate_heatmap_video(frame_detections= st.session_state.yolo_frame_detections,video_path= st.session_state.modelh264_video_file,
+                                    output_path=outputfile, return_heatmaps = True, weight_mapping=WEIGHTS)
+            
+            # with open('merged_frames_heatmap_yolov8.txt', 'w') as convert_file: 
+            #     convert_file.write(json.dumps(heatmaps))
+
+            # np.save('merged_frames_heatmap_yolov8.npy', blurred_heatmaps)
+            
+            # Extract MERGED frames if needed
+            path = "./UI_videos/model_merged_frames/"
+            helper.make_path(path=path)
+            helper.extract_frames(video_path=outputfile,output_dir=path)
+
+            # Store frame names in memory 
+            frame_names = [
+                p for p in os.listdir(path)
+                if os.path.splitext(p)[-1] in [".jpg", ".jpeg", ".JPG", ".JPEG"]
+            ]
+        
+        # Blur the merged maps now 
+        # blur_path = "./UI_videos/model_blurred_frames/"
+        # helper.make_path(path=blur_path)
+        # helper.blur_maps(frames=frame_names,input_video_dir=path, object_masks=heatmaps,
+        #                  iters = 1,save_frames=True, output_dir= blur_path)
+        
+        # output_blurred_file = f"./UI_videos/model_{model_type}_blurred.mp4"
+        # # Stitch frames to video
+        # helper.stitch_frames_to_video(
+        #     frames = "", 
+        #     frames_dir=blur_path, 
+        #     from_dir=True,
+        #     output_video_path=output_blurred_file
+        # )
+
+    convertedVideo_blurred = f"./UI_videos/model_{model_type}_blurred_h264.mp4"
+    helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo_blurred)
+    st.session_state.modelh264_video_file = convertedVideo_blurred
+
     if st.session_state.debug:
-        st.pyplot(fig)
-    st.success("Heatmap generated!")
+        st.video(convertedVideo_blurred)
+
     st.session_state.heatmap_done = True
 
 
@@ -146,7 +177,6 @@ def apply_filter(filter_type, video_file):
     if st.session_state.debug:
         st.video(convertedVideo)
     
-
 def show_video_details(video_file):
     """Display video metadata"""
     tfile = tempfile.NamedTemporaryFile(delete=False)
@@ -163,7 +193,6 @@ def show_video_details(video_file):
         col2.metric("Frames", frame_count)
         col3.metric("Duration (s)", f"{duration:.2f}")
         st.video(video_file)
-
 
 def hometab():
     if st.session_state.video_file is not None:
@@ -182,7 +211,7 @@ def hometab():
             if st.session_state.segmentation_done:
                 st.subheader("Step 2: Heatmap Generation")
                 if not st.session_state.heatmap_done:
-                    generate_heatmap()
+                    generate_heatmap(st.session_state.segmentation_model)
 
             # Apply filter if selected
             if st.session_state.heatmap_done and st.session_state.filter_type != "None":
@@ -209,7 +238,6 @@ def frameAnalysisTab():
     st.write("This is the content of the second tab")
     # Add different components
     st.slider("Select a value", 0, 50)
-
 
 def sidebar():
     st.header("Processing Steps")
@@ -272,7 +300,6 @@ def main():
     # Left sidebar for step selection
     with st.sidebar:
         sidebar()
-
 
 if __name__ == "__main__":
     main()
