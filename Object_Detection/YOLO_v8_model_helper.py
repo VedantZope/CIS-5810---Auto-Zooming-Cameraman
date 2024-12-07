@@ -152,11 +152,14 @@ def generate_heatmap_video(frame_detections, video_path, output_path, weight_map
         # Find contours of the thresholded regions to create the bounding box
         contours, _ = cv2.findContours(threshold_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+
+
         # Draw a bounding rectangle around the largest contour (region of interest)
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
             x, y, w_roi, h_roi = cv2.boundingRect(largest_contour)
             if get_contours:
+                # contour_dict[frame_number] = contours
                 contour_dict[frame_number] = largest_contour
             # Draw the rectangle on the heatmap
             cv2.rectangle(heatmap_color, (x, y), (x + w_roi, y + h_roi), (0,0,0), 2)

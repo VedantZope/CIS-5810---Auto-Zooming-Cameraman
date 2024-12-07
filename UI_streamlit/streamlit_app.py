@@ -29,6 +29,7 @@ from Object_Detection.YOLO_v8_model_helper import *
 # Import SmoothenZoom 
 from zooming.smoothen import SmoothVideoStabilizer
 from zooming.smoothenDarken import EnhancedVideoStabilizer
+from zooming.zoom_final import Stabilizer
 
 def init_session_state():
     """Initialize session state variables"""
@@ -51,6 +52,10 @@ def upload_video():
     )
     if uploaded_file is not None:
         st.session_state.video_file = uploaded_file
+        
+        if uploaded_file.name == "NBA Game 0021800013.mp4":
+            # print("DEMO FILE")
+            st.session_state.demo = True
 
         # save uploaded video to disc
         if "UI_videos" not in os.listdir():
@@ -74,16 +79,20 @@ def run_segmentation(model_type, video_file):
 
     with st.spinner("Running detection..."):
 
-        if model_type =="YOLOv11":
+        if st.session_state.demo:
+            print("frames detected")
+            frame_detections = np.load("yolo_frame_detections.npy", allow_pickle=True)
+
+        elif model_type =="YOLOv11":
             print("YOLO")
 
             frame_detections = YOLO(INPUT_VIDEO=st.session_state.input_video_file, OUTPUT_VIDEO=outputfile)
 
-            st.session_state.yolo_frame_detections = frame_detections
-
+        st.session_state.yolo_frame_detections = frame_detections
         st.success("Detection completed!")
     
     st.session_state.segmentation_done = True
+    # np.save("yolo_frame_detections.npy" ,frame_detections)
 
     #Extract INPUT Frames
     path = "./UI_videos/input_frames/"
@@ -150,10 +159,10 @@ def apply_filter(filter_type, video_file):
     with st.spinner(f"Automatically Zooming..."):
         # Call Zoom 
         # Initialize the stabilizer
-        stabilizer = EnhancedVideoStabilizer(
+        stabilizer = Stabilizer(
             buffer_size=30,  # Increase for smoother but slower transitions
-            max_threshold=0.25,  # Adjust for maximum allowed sudden changes
-            min_threshold=0.5  # Minimum threshold for changes
+            position_threshold=3,  # Adjust for maximum allowed sudden changes
+            size_threshold=8  # Minimum threshold for changes
         )
         stabilizer_frames = []
         # Get original input frames
@@ -199,7 +208,7 @@ def apply_filter(filter_type, video_file):
     with st.spinner(f"Applying {filter_type} filter..."):
         # Process the video
         if filter_type=="Kuwahara":
-            kuwahara_process_video(input_path=st.session_state.modelh264_video_file,
+            kuwahara_process_video(input_path=converted_zoomed_Video,
                                                 output_path = outputfile, kuwahara_param = st.session_state.kuwahara_param)
         else:
             st.text("No filter selected.")
@@ -207,17 +216,17 @@ def apply_filter(filter_type, video_file):
         st.success(f"{filter_type} filter applied! - Converting to Appropriate Codec.")
         st.session_state.filter_done = True
     
-    # convertedVideo = "./UI_videos/filter_output_h264.mp4"
-    # helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo)
+    convertedVideo = "./UI_videos/filter_output_h264.mp4"
+    helper.convert_video_h264(input_file=outputfile, output_file=convertedVideo)
 
     # # Extract frames for analysis later
 
-    # path = "./UI_videos/filter_frames/"
-    # helper.make_path(path=path)
-    # helper.extract_frames(video_path=convertedVideo,output_dir=path)
+    path = "./UI_videos/filter_frames/"
+    helper.make_path(path=path)
+    helper.extract_frames(video_path=convertedVideo,output_dir=path)
 
-    # if st.session_state.debug:
-    #     st.video(convertedVideo)
+    if st.session_state.debug:
+        st.video(convertedVideo)
     
 def show_video_details(video_file):
     """Display video metadata"""
@@ -306,6 +315,9 @@ def sidebar():
         video_name = st.session_state.video_file.name
         video_name = video_name.rsplit('.', 1)[0]  # Remove file extension
         st.success(f"Video uploaded successfully: {video_name}")
+
+        if st.session_state.demo:
+            st.info("Demo video detected")
 
     # Debug 
     debug = st.checkbox(label="Debug")
