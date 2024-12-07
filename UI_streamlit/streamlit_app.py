@@ -7,6 +7,7 @@ import time
 import tempfile
 import numpy as np
 import cv2
+import base64
 import streamlit as st
 import os 
 import subprocess
@@ -71,16 +72,16 @@ def run_segmentation(model_type, video_file):
 
     outputfile = f"./UI_videos/model_{model_type}_output.mp4"
 
-    with st.spinner("Running segmentation..."):
+    with st.spinner("Running detection..."):
 
-        if model_type =="YOLOv8":
+        if model_type =="YOLOv11":
             print("YOLO")
 
             frame_detections = YOLO(INPUT_VIDEO=st.session_state.input_video_file, OUTPUT_VIDEO=outputfile)
 
             st.session_state.yolo_frame_detections = frame_detections
 
-        st.success("Segmentation completed!")
+        st.success("Detection completed!")
     
     st.session_state.segmentation_done = True
 
@@ -108,7 +109,7 @@ def generate_heatmap(model_type):
     outputfile = f"./UI_videos/model_{model_type}_merged.mp4"
 
     with st.spinner("Generating heatmap..."):
-        if model_type=='YOLOv8':
+        if model_type=='YOLOv11':
             WEIGHTS = {'person': 10, 'Basketball': 50}
             blurred_heatmaps, contours = generate_heatmap_video(frame_detections= st.session_state.yolo_frame_detections,video_path= st.session_state.modelh264_video_file,
                                     output_path=outputfile, return_heatmaps = True, weight_mapping=WEIGHTS)
@@ -244,7 +245,7 @@ def hometab():
 
         if st.session_state.processing_started:
             # Run segmentation
-            st.subheader("Step 1: Segmentation")
+            st.subheader("Step 1: Detection")
             if not st.session_state.segmentation_done:
                 run_segmentation(st.session_state.segmentation_model, st.session_state.video_file)
 
@@ -280,23 +281,41 @@ def frameAnalysisTab():
     # Add different components
     st.slider("Select a value", 0, 50)
 
+def commentaryTab(video_name):
+    st.header("Commentary Tab")
+    if st.session_state.processing_started == True:
+        # open a txt file and print the commentary
+        with open(f"nba-commentary-ai/{video_name}.txt", "r") as file:
+            commentary = file.read()
+
+        st.write(commentary)
+        #audio
+        audio_file = open(f"nba-commentary-ai/{video_name}.mp3", "rb")
+        audio_bytes = audio_file.read()
+        st.audio(audio_bytes, format="audio/mp3")
+    else:
+        st.write("Please start processing the video in the first tab.")
+
+
 def sidebar():
     st.header("Processing Steps")
-
     # Step 1: Video Upload
     st.subheader("1. Upload Video")
+    video_name = None
     if upload_video():
-        st.success("Video uploaded!")
+        video_name = st.session_state.video_file.name
+        video_name = video_name.rsplit('.', 1)[0]  # Remove file extension
+        st.success(f"Video uploaded successfully: {video_name}")
 
     # Debug 
     debug = st.checkbox(label="Debug")
     st.session_state.debug = debug
 
     # Step 2: Segmentation Settings
-    st.subheader("2. Segmentation Settings")
+    st.subheader("2. Detection Settings")
     segmentation_model = st.selectbox(
-        "Select Segmentation Model",
-        ["YOLOv8", "Model B", "Model C"]
+        "Select Detection Model",
+        ["YOLOv11", "SAM2"]
     )
     st.session_state.segmentation_model = segmentation_model
 
@@ -315,7 +334,7 @@ def sidebar():
         ["None", "Blur", "Sharpen", "Grayscale", "Kuwahara"]
     )
     st.session_state.filter_type = filter_type
-    if filter_type=="Kuwahara":
+    if filter_type == "Kuwahara":
         kuwahara_param = st.number_input(label="Kuwahara radius", min_value=1, max_value=10, step=1, format="%i")
         st.session_state.kuwahara_param = kuwahara_param
 
@@ -323,24 +342,26 @@ def sidebar():
     if st.button("Start Processing") and st.session_state.video_file is not None:
         st.session_state.processing_started = True
 
+    return video_name
+
 def main():
     st.title("Computer Vision Final Project Group 30 Dashboard")
     init_session_state()
 
     # Tabs
-    home_tab, frame_analysis_tab = st.tabs(["Home", "Analyze Frames"])
+    home_tab, commentary_tab = st.tabs(["Home", "Commentary"])
 
     # Add content to first tab
     with home_tab:
         hometab()
 
-    # Add content to second tab
-    with frame_analysis_tab:
-        frameAnalysisTab()
-
     # Left sidebar for step selection
     with st.sidebar:
-        sidebar()
+        video_name = sidebar()
+
+    # Add content to second tab
+    with commentary_tab:
+        commentaryTab(video_name)
 
 if __name__ == "__main__":
     main()
