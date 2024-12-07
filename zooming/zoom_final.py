@@ -3,6 +3,8 @@ import cv2
 from filterpy.kalman import KalmanFilter
 from collections import deque
 
+from PIL import Image
+
 class Stabilizer:
     def __init__(self, buffer_size=30):
         self.buffer_size = buffer_size
@@ -119,6 +121,10 @@ class Stabilizer:
         return target_width, target_height
     
     def process_frame(self, frame, contour):
+
+        # Convert Image to array 
+        frame = np.array(frame)
+
         frame_height, frame_width = frame.shape[:2]
         
         # Get bounding box

@@ -147,6 +147,7 @@ def process_frame(frame, models, state, frame_count, DEVICE, COLORS, PERSON_CONF
     return frame, state, detections
 
 def load_yolo_model(model_path):
+
     """
     Load YOLOv8 model from a .pt file.
     """
