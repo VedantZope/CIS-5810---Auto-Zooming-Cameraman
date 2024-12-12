@@ -6,3 +6,5 @@ Object_Detection/Models/*pt
 *.jpg
 *.mp4
 .env.DS_Store
+*.DS_Store
+*.mov
