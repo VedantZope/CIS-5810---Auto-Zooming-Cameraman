@@ -5,4 +5,4 @@
 Object_Detection/Models/*pt
 *.jpg
 *.mp4
-.env
+.env.DS_Store
